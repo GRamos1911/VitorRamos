@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LifeBoard — O Dashboard da Sua Vida</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  body { margin: 0; background: #030712; font-family: 'Segoe UI', sans-serif; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #111827; }
+  ::-webkit-scrollbar-thumb { background: #4c1d95; border-radius: 4px; }
+  .animate-bounce { animation: bounce 1s infinite; }
+  .animate-pulse { animation: pulse 1.5s infinite; }
+  @keyframes bounce {
+    0%,100%{transform:translateY(-10%) translateX(-50%)} 50%{transform:translateY(0) translateX(-50%)}
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const { useState } = React;
+
+const dimensions = [
+  { id: 1, icon: "💧", label: "Saúde & Hábitos", color: "#06b6d4", bg: "rgba(6,182,212,0.12)", pending: 3, done: 5, alert: "Beba água agora! Última vez há 2h" },
+  { id: 2, icon: "💰", label: "Finanças", color: "#10b981", bg: "rgba(16,185,129,0.12)", pending: 2, done: 3, alert: "IPTU vence em 7 dias!" },
+  { id: 3, icon: "🏥", label: "Saúde Médica", color: "#f43f5e", bg: "rgba(244,63,94,0.12)", pending: 1, done: 2, alert: "Retorno cardiologista em 3 dias" },
+  { id: 4, icon: "📚", label: "Desenvolvimento", color: "#a78bfa", bg: "rgba(167,139,250,0.12)", pending: 4, done: 6, alert: "Aula de inglês hoje às 19h" },
+  { id: 5, icon: "🏠", label: "Casa & Rotina", color: "#f59e0b", bg: "rgba(245,158,11,0.12)", pending: 2, done: 4, alert: "Revisão do carro pendente" },
+  { id: 6, icon: "👔", label: "Trabalho", color: "#6366f1", bg: "rgba(99,102,241,0.12)", pending: 3, done: 7, alert: "Reunião amanhã às 9h" },
+];
+
+const allTasks = [
+  { id: 1, dim: 2, text: "Pagar IPTU", due: "20/05", urgent: true, done: false },
+  { id: 2, dim: 3, text: "Retorno cardiologista", due: "29/04", urgent: true, done: false },
+  { id: 3, dim: 1, text: "Beber 2L de água", due: "Hoje", urgent: false, done: false },
+  { id: 4, dim: 4, text: "Aula de inglês", due: "Hoje 19h", urgent: false, done: false },
+  { id: 5, dim: 5, text: "Revisão do carro", due: "30/04", urgent: false, done: false },
+  { id: 6, dim: 6, text: "Reunião de equipe", due: "Amanhã 9h", urgent: false, done: false },
+  { id: 7, dim: 2, text: "Renovar seguro do carro", due: "15/05", urgent: false, done: false },
+  { id: 8, dim: 1, text: "Dormir 8h", due: "Hoje", urgent: false, done: true },
+];
+
+const weeklyData = [
+  { day: "Seg", score: 70 }, { day: "Ter", score: 85 }, { day: "Qua", score: 60 },
+  { day: "Qui", score: 90 }, { day: "Sex", score: 75 }, { day: "Sáb", score: 50 }, { day: "Dom", score: 80 },
+];
+
+const aiInsights = [
+  "Você tende a esquecer tarefas financeiras às sextas-feiras. Que tal um lembrete fixo?",
+  "Seu score é 15% maior nos dias em que você bebe água pela manhã.",
+  "Você completou 100% das consultas médicas este mês. Parabéns!",
+  "Melhor horário para suas tarefas de desenvolvimento: entre 20h e 22h.",
+];
+
+function App() {
+  const [screen, setScreen] = useState("dashboard");
+  const [selectedDim, setSelectedDim] = useState(null);
+  const [tasks, setTasks] = useState(allTasks);
+  const [inputText, setInputText] = useState("");
+  const [aiPreview, setAiPreview] = useState(null);
+  const [listening, setListening] = useState(false);
+  const [insightIdx, setInsightIdx] = useState(0);
+  const [addStep, setAddStep] = useState(1);
+  const [notification, setNotification] = useState(null);
+
+  const totalDone = tasks.filter(t => t.done).length;
+  const score = Math.round((totalDone / tasks.length) * 100);
+
+  function showNotif(msg) {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3000);
+  }
+
+  function handleAddText() {
+    if (!inputText.trim()) return;
+    const lower = inputText.toLowerCase();
+    let dim = 6, due = "Em breve", urgent = false;
+    if (lower.includes("água") || lower.includes("dormir") || lower.includes("exerc")) dim = 1;
+    else if (lower.includes("iptu") || lower.includes("boleto") || lower.includes("pagar") || lower.includes("seguro")) { dim = 2; urgent = true; }
+    else if (lower.includes("médico") || lower.includes("consul") || lower.includes("exame")) { dim = 3; urgent = true; }
+    else if (lower.includes("curso") || lower.includes("inglês") || lower.includes("aula") || lower.includes("livro")) dim = 4;
+    else if (lower.includes("casa") || lower.includes("compra") || lower.includes("carro")) dim = 5;
+    const dimObj = dimensions.find(d => d.id === dim);
+    setAiPreview({ dim, dimObj, due, urgent, text: inputText });
+    setAddStep(2);
+  }
+
+  function confirmAdd() {
+    setTasks([...tasks, { id: tasks.length + 1, dim: aiPreview.dim, text: aiPreview.text, due: aiPreview.due, urgent: aiPreview.urgent, done: false }]);
+    setInputText(""); setAiPreview(null); setAddStep(1); setScreen("dashboard");
+    showNotif("✅ Pendência adicionada com sucesso!");
+  }
+
+  function toggleTask(id) {
+    setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  }
+
+  function simulateVoice() {
+    setListening(true);
+    setTimeout(() => { setInputText("Pagar boleto do seguro do carro até dia 10"); setListening(false); }, 2000);
+  }
+
+  const dimTasks = selectedDim ? tasks.filter(t => t.dim === selectedDim.id) : [];
+
+  const card = (children, style = {}) => (
+    <div style={{ background: "#1f2937", borderRadius: 16, padding: 14, marginBottom: 12, ...style }}>{children}</div>
+  );
+
+  const btn = (label, onClick, style = {}) => (
+    <button onClick={onClick} style={{ width: "100%", padding: "12px", borderRadius: 14, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, marginBottom: 10, ...style }}>{label}</button>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#030712", display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "20px 0" }}>
+      {notification && (
+        <div className="animate-bounce" style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 999, background: "#10b981", color: "white", padding: "12px 24px", borderRadius: 20, fontWeight: 700, fontSize: 14, whiteSpace: "nowrap" }}>{notification}</div>
+      )}
+
+      <div style={{ width: 390, minHeight: "85vh", background: "#111827", borderRadius: 32, overflow: "hidden", boxShadow: "0 0 60px rgba(99,102,241,0.3)", position: "relative", display: "flex", flexDirection: "column" }}>
+
+        {/* Status Bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 20px 8px", fontSize: 12, color: "#6b7280" }}>
+          <span>9:41</span>
+          <span style={{ fontWeight: 800, color: "white", letterSpacing: 3 }}>LIFEBOARD</span>
+          <span>📶 🔋</span>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 90px" }}>
+
+          {/* DASHBOARD */}
+          {screen === "dashboard" && <>
+            <div style={{ marginBottom: 16, marginTop: 8 }}>
+              <div style={{ color: "#9ca3af", fontSize: 13 }}>Bom dia,</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: "white" }}>Rafael 👋</div>
+              <div style={{ color: "#6b7280", fontSize: 12, marginTop: 2 }}>Domingo, 26 de Abril de 2026</div>
+            </div>
+
+            {/* Score */}
+            <div style={{ background: "linear-gradient(135deg,#7c3aed,#4f46e5)", borderRadius: 20, padding: 16, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ color: "#c4b5fd", fontSize: 12 }}>Score da semana</div>
+                <div style={{ fontSize: 44, fontWeight: 900, color: "white", lineHeight: 1 }}>{score}<span style={{ fontSize: 16, fontWeight: 400, color: "#c4b5fd" }}>/100</span></div>
+                <div style={{ color: "#c4b5fd", fontSize: 12, marginTop: 4 }}>{tasks.filter(t=>!t.done).length} pendentes • {totalDone} concluídas</div>
+              </div>
+              <div style={{ fontSize: 48 }}>🏆</div>
+            </div>
+
+            {/* AI Alert */}
+            <div style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.5)", borderRadius: 16, padding: 12, marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 22 }}>🧠</span>
+              <div>
+                <div style={{ color: "#f59e0b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>IA Alerta</div>
+                <div style={{ color: "white", fontSize: 13, marginTop: 2 }}>{dimensions[1].alert}</div>
+              </div>
+            </div>
+
+            {/* Dimensions Grid */}
+            <div style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Suas Dimensões</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              {dimensions.map(dim => {
+                const dt = tasks.filter(t => t.dim === dim.id);
+                const pct = dt.length > 0 ? Math.round((dt.filter(t=>t.done).length / dt.length) * 100) : 0;
+                return (
+                  <button key={dim.id} onClick={() => { setSelectedDim(dim); setScreen("dimension"); }}
+                    style={{ background: dim.bg, border: `1px solid ${dim.color}40`, borderRadius: 16, padding: 12, textAlign: "left", cursor: "pointer", transition: "transform 0.15s" }}
+                    onMouseOver={e => e.currentTarget.style.transform = "scale(1.04)"}
+                    onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}>
+                    <div style={{ fontSize: 24, marginBottom: 4 }}>{dim.icon}</div>
+                    <div style={{ color: "white", fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{dim.label}</div>
+                    <div style={{ color: "#9ca3af", fontSize: 11, marginTop: 4 }}>{tasks.filter(t=>t.dim===dim.id&&!t.done).length} pendentes</div>
+                    <div style={{ marginTop: 8, height: 4, background: "#374151", borderRadius: 4 }}>
+                      <div style={{ height: 4, width: `${pct}%`, background: dim.color, borderRadius: 4 }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Urgent */}
+            <div style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Urgente Hoje</div>
+            {tasks.filter(t => t.urgent && !t.done).map(task => {
+              const dim = dimensions.find(d => d.id === task.dim);
+              return (
+                <div key={task.id} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 14, padding: 12, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 20 }}>{dim?.icon}</span>
+                    <div>
+                      <div style={{ color: "white", fontSize: 13, fontWeight: 600 }}>{task.text}</div>
+                      <div style={{ color: "#f87171", fontSize: 11 }}>Vence: {task.due}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => { toggleTask(task.id); showNotif("✅ Tarefa concluída!"); }}
+                    style={{ background: "#ef4444", color: "white", border: "none", borderRadius: 20, padding: "5px 14px", fontSize: 12, cursor: "pointer", fontWeight: 700 }}>Feito</button>
+                </div>
+              );
+            })}
+          </>}
+
+          {/* DIMENSION */}
+          {screen === "dimension" && selectedDim && <>
+            <button onClick={() => setScreen("dashboard")} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 13, cursor: "pointer", padding: "10px 0", display: "flex", alignItems: "center", gap: 4 }}>← Voltar</button>
+            <div style={{ background: `linear-gradient(135deg,${selectedDim.color}99,${selectedDim.color}55)`, borderRadius: 20, padding: 16, marginBottom: 14 }}>
+              <div style={{ fontSize: 36 }}>{selectedDim.icon}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "white" }}>{selectedDim.label}</div>
+              <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 4 }}>{dimTasks.filter(t=>!t.done).length} pendentes • {dimTasks.filter(t=>t.done).length} concluídas</div>
+            </div>
+            {dimTasks.length === 0 && <div style={{ color: "#6b7280", textAlign: "center", marginTop: 40 }}>Nenhuma tarefa nesta dimensão.</div>}
+            {dimTasks.map(task => (
+              <div key={task.id} style={{ background: "#1f2937", borderRadius: 14, padding: 12, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", opacity: task.done ? 0.5 : 1 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button onClick={() => { toggleTask(task.id); showNotif(task.done ? "↩️ Reaberta!" : "✅ Concluída!"); }}
+                    style={{ width: 26, height: 26, borderRadius: "50%", border: `2px solid ${task.done ? "#10b981" : "#6b7280"}`, background: task.done ? "#10b981" : "transparent", color: "white", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {task.done ? "✓" : ""}
+                  </button>
+                  <div>
+                    <div style={{ color: task.done ? "#6b7280" : "white", fontSize: 13, fontWeight: 600, textDecoration: task.done ? "line-through" : "none" }}>{task.text}</div>
+                    <div style={{ color: "#6b7280", fontSize: 11 }}>{task.due}</div>
+                  </div>
+                </div>
+                {task.urgent && !task.done && <span style={{ background: "#ef4444", color: "white", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>Urgente</span>}
+              </div>
+            ))}
+          </>}
+
+          {/* ADD */}
+          {screen === "add" && <>
+            <button onClick={() => { setScreen("dashboard"); setAddStep(1); setInputText(""); setAiPreview(null); }} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 13, cursor: "pointer", padding: "10px 0" }}>← Voltar</button>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "white", marginBottom: 4 }}>Adicionar Pendência</div>
+            <div style={{ color: "#9ca3af", fontSize: 13, marginBottom: 20 }}>Fale ou escreva em linguagem natural</div>
+
+            {addStep === 1 && <>
+              <div style={{ background: "#1f2937", borderRadius: 16, padding: 14, marginBottom: 12 }}>
+                <textarea value={inputText} onChange={e => setInputText(e.target.value)}
+                  placeholder='Ex: "Pagar IPTU até dia 20" ou "Consulta médica sexta às 15h"'
+                  rows={3} style={{ width: "100%", background: "transparent", border: "none", color: "white", fontSize: 13, resize: "none", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              </div>
+              {btn(listening ? "🎙️ Ouvindo..." : "🎙️ Usar Voz", simulateVoice, { background: listening ? "#ef4444" : "#374151", color: "white" })}
+              {btn("🧠 Analisar com IA", handleAddText, { background: inputText.trim() ? "#7c3aed" : "#374151", color: "white", opacity: inputText.trim() ? 1 : 0.5, cursor: inputText.trim() ? "pointer" : "not-allowed" })}
+              <div style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, margin: "16px 0 10px" }}>Sugestões Rápidas</div>
+              {["Beber 2L de água hoje", "Pagar boleto do cartão", "Agendar retorno médico", "Revisar meta de inglês"].map(s => (
+                <button key={s} onClick={() => setInputText(s)} style={{ width: "100%", textAlign: "left", background: "#1f2937", border: "none", borderRadius: 12, padding: "12px 16px", marginBottom: 8, color: "#d1d5db", fontSize: 13, cursor: "pointer" }}>+ {s}</button>
+              ))}
+            </>}
+
+            {addStep === 2 && aiPreview && <>
+              <div style={{ background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.5)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
+                <div style={{ color: "#a78bfa", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🧠 IA Interpretou</div>
+                <div style={{ color: "white", fontWeight: 700, marginBottom: 10, fontSize: 14 }}>{aiPreview.text}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ background: "#374151", color: "#d1d5db", borderRadius: 20, padding: "4px 10px", fontSize: 11 }}>{aiPreview.dimObj?.icon} {aiPreview.dimObj?.label}</span>
+                  <span style={{ background: "#374151", color: "#d1d5db", borderRadius: 20, padding: "4px 10px", fontSize: 11 }}>📅 {aiPreview.due}</span>
+                  {aiPreview.urgent && <span style={{ background: "#ef4444", color: "white", borderRadius: 20, padding: "4px 10px", fontSize: 11 }}>🔴 Urgente</span>}
+                  <span style={{ background: "#374151", color: "#d1d5db", borderRadius: 20, padding: "4px 10px", fontSize: 11 }}>🔔 Lembrete: 2 dias antes</span>
+                </div>
+              </div>
+              {btn("✅ Confirmar e Salvar", confirmAdd, { background: "#059669", color: "white" })}
+              {btn("✏️ Ajustar", () => setAddStep(1), { background: "#374151", color: "white" })}
+            </>}
+          </>}
+
+          {/* REPORT */}
+          {screen === "report" && <>
+            <button onClick={() => setScreen("dashboard")} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 13, cursor: "pointer", padding: "10px 0" }}>← Voltar</button>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "white", marginBottom: 4 }}>Relatório Semanal</div>
+            <div style={{ color: "#9ca3af", fontSize: 13, marginBottom: 16 }}>Semana de 20 a 26 de Abril</div>
+            <div style={{ background: "linear-gradient(135deg,#7c3aed,#4f46e5)", borderRadius: 20, padding: 20, marginBottom: 14, textAlign: "center" }}>
+              <div style={{ color: "#c4b5fd", fontSize: 13 }}>Score Geral</div>
+              <div style={{ fontSize: 64, fontWeight: 900, color: "white", lineHeight: 1 }}>{score}</div>
+              <div style={{ color: "#c4b5fd", fontSize: 12 }}>de 100 pontos</div>
+            </div>
+
+            {/* Bar Chart */}
+            <div style={{ background: "#1f2937", borderRadius: 16, padding: 14, marginBottom: 14 }}>
+              <div style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12 }}>Score por Dia</div>
+              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 4, height: 80 }}>
+                {weeklyData.map(d => (
+                  <div key={d.day} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+                    <div style={{ width: "100%", background: "#7c3aed", borderRadius: "4px 4px 0 0", height: `${d.score}%` }} />
+                    <div style={{ color: "#6b7280", fontSize: 10, marginTop: 4 }}>{d.day}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, marginBottom: 10 }}>Por Dimensão</div>
+            {dimensions.map(dim => {
+              const dt = tasks.filter(t => t.dim === dim.id);
+              const pct = dt.length > 0 ? Math.round((dt.filter(t=>t.done).length / dt.length) * 100) : 0;
+              return (
+                <div key={dim.id} style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "white", marginBottom: 4 }}>
+                    <span>{dim.icon} {dim.label}</span>
+                    <span style={{ color: "#9ca3af" }}>{pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: "#374151", borderRadius: 4 }}>
+                    <div style={{ height: 6, width: `${pct}%`, background: dim.color, borderRadius: 4 }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 16, padding: 14, marginTop: 8 }}>
+              <div style={{ color: "#f59e0b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🧠 Insight da IA</div>
+              <div style={{ color: "#e5e7eb", fontSize: 13 }}>{aiInsights[insightIdx]}</div>
+              <button onClick={() => setInsightIdx((insightIdx + 1) % aiInsights.length)} style={{ background: "none", border: "none", color: "#f59e0b", fontSize: 12, cursor: "pointer", marginTop: 8, padding: 0, textDecoration: "underline" }}>Ver próximo insight →</button>
+            </div>
+          </>}
+
+          {/* NOTIFICATIONS */}
+          {screen === "notifications" && <>
+            <button onClick={() => setScreen("dashboard")} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 13, cursor: "pointer", padding: "10px 0" }}>← Voltar</button>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "white", marginBottom: 16 }}>Notificações</div>
+            {[
+              { icon: "💰", msg: "IPTU vence em 7 dias! Prepare o pagamento.", time: "Agora", border: "#ef4444" },
+              { icon: "🏥", msg: "Lembrete: Retorno cardiologista amanhã às 10h.", time: "2h atrás", border: "#f97316" },
+              { icon: "💧", msg: "Você não bebe água há 2 horas. Hidrate-se!", time: "3h atrás", border: "#06b6d4" },
+              { icon: "📚", msg: "Aula de inglês hoje às 19h. Não esqueça!", time: "5h atrás", border: "#a78bfa" },
+              { icon: "🧠", msg: "Seu score caiu 10pts esta semana. Quer uma dica?", time: "Ontem", border: "#6366f1" },
+            ].map((n, i) => (
+              <div key={i} style={{ background: "#1f2937", borderLeft: `4px solid ${n.border}`, borderRadius: 14, padding: 12, marginBottom: 10, display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 22 }}>{n.icon}</span>
+                <div>
+                  <div style={{ color: "white", fontSize: 13 }}>{n.msg}</div>
+                  <div style={{ color: "#6b7280", fontSize: 11, marginTop: 4 }}>{n.time}</div>
+                </div>
+              </div>
+            ))}
+          </>}
+
+        </div>
+
+        {/* Bottom Nav */}
+        <div style={{ position: "sticky", bottom: 0, background: "#111827", borderTop: "1px solid #1f2937", display: "flex", justifyContent: "space-around", alignItems: "center", padding: "10px 0 14px", zIndex: 40 }}>
+          {[
+            { id: "dashboard", icon: "🏠", label: "Início" },
+            { id: "notifications", icon: "🔔", label: "Alertas" },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setScreen(tab.id)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: screen === tab.id ? "#7c3aed" : "#6b7280" }}>
+              <span style={{ fontSize: 22 }}>{tab.icon}</span>
+              <span style={{ fontSize: 11 }}>{tab.label}</span>
+            </button>
+          ))}
+
+          <button onClick={() => { setScreen("add"); setAddStep(1); setInputText(""); setAiPreview(null); }}
+            style={{ background: "#7c3aed", border: "none", borderRadius: "50%", width: 56, height: 56, fontSize: 28, color: "white", cursor: "pointer", marginTop: -20, boxShadow: "0 0 20px rgba(124,58,237,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+
+          {[
+            { id: "report", icon: "📊", label: "Relatório" },
+            { id: "profile", icon: "👤", label: "Perfil" },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => tab.id !== "profile" && setScreen(tab.id)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: screen === tab.id ? "#7c3aed" : "#6b7280" }}>
+              <span style={{ fontSize: 22 }}>{tab.icon}</span>
+              <span style={{ fontSize: 11 }}>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
